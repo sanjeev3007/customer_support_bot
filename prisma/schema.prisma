@@ -1,0 +1,108 @@
+datasource db {
+  provider   = "postgresql"
+  extensions = [pgvector(map: "vector")]
+}
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+enum Role {
+  ADMIN
+  CUSTOMER
+}
+
+enum DocType {
+  PDF
+  DOCX
+  TXT
+  MD
+  URL
+}
+
+enum DocStatus {
+  UPLOADED
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model User {
+  id            String         @id @default(uuid())
+  email         String         @unique
+  password      String
+  role          Role           @default(CUSTOMER)
+  name          String?
+  conversations Conversation[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@map("users")
+}
+
+model Conversation {
+  id        String    @id @default(uuid())
+  title     String
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  Message[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@map("conversations")
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String       // "user" or "assistant"
+  content        String
+  latency        Int?         // in milliseconds
+  tokenUsage     Int?         // tokens used
+  retrievedChunks Json?       // json representation of sources used
+  createdAt      DateTime     @default(now())
+
+  @@map("messages")
+}
+
+model Document {
+  id         String          @id @default(uuid())
+  name       String
+  type       DocType
+  sourceUrl  String?
+  status     DocStatus       @default(UPLOADED)
+  chunkCount Int             @default(0)
+  error      String?
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+  chunks     DocumentChunk[]
+
+  @@map("documents")
+}
+
+model DocumentChunk {
+  id         String             @id @default(uuid())
+  documentId String
+  document   Document           @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  content    String
+  embedding  Unsupported("vector(3072)")?
+  metadata   Json
+  createdAt  DateTime           @default(now())
+  embeddingsMetadata EmbeddingsMetadata[]
+
+  @@map("document_chunks")
+  @@index([documentId])
+}
+
+model EmbeddingsMetadata {
+  id        String        @id @default(uuid())
+  chunkId   String
+  chunk     DocumentChunk @relation(fields: [chunkId], references: [id], onDelete: Cascade)
+  model     String
+  dimensions Int
+  createdAt DateTime      @default(now())
+
+  @@map("embeddings_metadata")
+}
